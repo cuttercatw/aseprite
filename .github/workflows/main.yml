@@ -1,0 +1,75 @@
+name: Build Aseprite
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      shell: powershell
+      run: |
+        choco install ninja cmake git -y
+
+    - name: Clone Aseprite source
+      shell: powershell
+      run: |
+        git clone --recursive https://github.com/aseprite/aseprite.git
+
+    - name: Download Skia
+      shell: powershell
+      run: |
+        mkdir deps
+        cd deps
+
+        Invoke-WebRequest `
+        https://github.com/aseprite/skia/releases/download/m124/Skia-Windows-Release-x64.zip `
+        -OutFile skia.zip
+
+        Expand-Archive skia.zip skia
+
+    - name: Configure
+      shell: powershell
+      run: |
+        cd aseprite
+        mkdir build
+        cd build
+
+        cmake `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          -DLAF_BACKEND=skia `
+          -DSKIA_DIR="../../deps/skia" `
+          -DSKIA_LIBRARY_DIR="../../deps/skia/out/Release-x64" `
+          ..
+
+    - name: Build
+      shell: powershell
+      run: |
+        cd aseprite/build
+        ninja aseprite
+
+    - name: Package
+      shell: powershell
+      run: |
+        mkdir output
+
+        Copy-Item `
+        aseprite/build/bin/* `
+        output/ `
+        -Recurse
+
+        Compress-Archive `
+        output/* `
+        Aseprite-Windows.zip
+
+    - name: Upload Aseprite
+      uses: actions/upload-artifact@v4
+      with:
+        name: Aseprite-Windows
+        path: Aseprite-Windows.zip
